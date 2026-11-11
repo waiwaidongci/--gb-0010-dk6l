@@ -65,6 +65,14 @@ min θ
 - 规范JSON SHA256包含全部稳定排序机构观察、机构标识、全部数值、参照集/季度、输入输出字段、敏感性数量、基线自含与统一移除规则、算法版本。没有随机计算；HiGHS返回一组最优解，不声称参照权重唯一。
 - 测试含闭式三DMU：[x,y]=[1,1],[2,1],[1,2]，基线θ=[.5,.25,1]；统一移除C后θ=[1,.5,2]，以及单位缩放不变、第二阶段松弛、真实不可行与求解器状态验证。
 
+## 后台任务的断点、去重与接管
+
+- worker按场馆保存基线进度（`baseline.<observation_id>`），再按被移除标杆保存每个情景的目标分数（`scenarios.<removed_id>.scores.<observation_id>`），每一步提交后才继续下一项。进程中断后，新执行者从最后提交的场馆继续，不重算已保存的基线或情景分数。`efficiency_runs.checkpoint`保存进度，`checkpoint_version`逐次递增。
+- 断点同时绑定同期样本和求解口径：`checkpoint_sample_digest`覆盖参照集标识、来源文件、季度与全部稳定排序观察值；`checkpoint_config_digest`覆盖投入/产出字段、敏感性数量、基线自含、统一移除规则与算法版本。恢复时任一摘要不一致即拒绝混用旧结果，研究标为`failed`并保留不含旧结果的错误说明，需按新样本重新建立研究。
+- 投递是至少一次语义：已`completed`的研究再次被worker取到不会重新求解。执行前用条件更新原子领取任务，`claim_generation`每次领取或接管递增；所有断点和最终结果写入都带`WHERE owner_token=? AND claim_generation=? AND status='running'`。旧执行者恢复后即使算完，也只能得到0行更新，不能覆盖接管者的断点或最终结果。
+- 租约`lease_expires_at`在每次保存进度时续期（`RUN_LEASE_SECONDS`，默认5秒）。只有租约已过期的`running`研究才可被另一执行者接管，仍活跃执行的研究不会被重复领取。
+- 续跑与一次跑完使用同一组观察顺序、参照集和求解口径，结果按原顺序重新组装，因此基线θ、参照λ、松弛、情景分数、`fingerprint`与一次跑完完全一致。验证见`backend/tests/test_run_resume.py`：中断后复用部分断点、续跑结果与对照研究逐字段相等、重复/过期领取、旧执行者隔离、样本变化与口径变化拒绝混用。
+
 ## 页面、实体与共享组件
 
 六页：研究总览、同期样本、效率求解、参照与敏感性、改进假设、评议留痕。五核心实体BenchmarkSet、Venue、PeriodObservation、EfficiencyRun、ImprovementCase各有model/schema/service/controller/route/前端API/store/页面链路。
@@ -80,10 +88,10 @@ min θ
 | frontend | React18.3.1、TypeScript、Vite6.4.6内置esbuild automatic JSX、Nginx1.27 |
 | backend | Python3.11、FastAPI、SQLAlchemy、psycopg3、PyJWT |
 | 算法 | NumPy、SciPy1.17.1/HiGHS两阶段线性规划 |
-| worker | 单Python消费者；DB任务状态为事实源，Redis唤醒并恢复queued/running |
+| worker | 单Python消费者；DB任务状态为事实源，Redis唤醒并恢复queued/过期running；每场馆断点与租约接管 |
 | db/redis | PostgreSQL16、Redis7 AOF |
 
-恰好五服务，均有healthcheck；backend等db/redis healthy；worker再等backend初始化；frontend等backend。命名卷包括数据库、Redis、后端/worker共享产物。当前求解结果在DB、CSV实时生成，共享卷保留扩展通道。初始schema由metadata创建，migrations记录v1自然键，未包含生产schema升级工具。
+恰好五服务，均有healthcheck；backend等db/redis healthy；worker再等backend初始化；frontend等backend。命名卷包括数据库、Redis、后端/worker共享产物。当前求解结果在DB、CSV实时生成，共享卷保留扩展通道。初始schema由metadata创建，migrations记录v1自然键与v2断点/租约列，未包含生产schema升级工具。
 
 `frontend/src/{api,stores,types,components/common,hooks,pages,router,utils,constants}`；`backend/src/{routes,controllers,services,models,schemas,middlewares,utils,constants,config}`；`backend/scripts/seed_demo.py`。
 
@@ -94,7 +102,8 @@ min θ
 | DB_PASSWORD | 本地PostgreSQL演示密码 |
 | JWT_SECRET | 项目独立签名密钥 |
 | SEED_DEMO | true自动seed，失败记日志但允许API启动 |
+| RUN_LEASE_SECONDS | 5；worker每保存一项进度后续租，过期running可被接管 |
 
 seed自然键为账号邮箱、参照集code、场馆code、(benchmark_id,venue_id)、研究名称、假设标题；已存在记录不覆盖用户修改。初始24机构×两个季度=48观察，2研究、1个获批假设；数值生成固定seed91。其余测试数据由独立验收脚本创建。
 
-本地开发：启动db/redis，在backend安装requirements、配置DATABASE_URL/REDIS_URL/JWT_SECRET，运行`uvicorn src.main:app --reload`及`python -m src.worker`；前端`npm ci && npm run dev`，默认/api代理到19214，如本地API用8000需同步修改代理。测试报告和截图在批次根`test-artifacts/gb-0010/`。MIT License，见LICENSE。
+本地开发：启动db/redis，在backend安装requirements、配置DATABASE_URL/REDIS_URL/JWT_SECRET，运行`uvicorn src.main:app --reload`及`python -m src.worker`；前端`npm ci && npm run dev`，默认/api代理到19214，如本地API用8000需同步修改代理。后端回归`cd backend && python -m unittest discover -s tests -v`（覆盖断点续跑、重复投递、租约接管、旧执行者隔离与来源/口径变化拒绝）。测试报告和截图在批次根`test-artifacts/gb-0010/`。MIT License，见LICENSE。
