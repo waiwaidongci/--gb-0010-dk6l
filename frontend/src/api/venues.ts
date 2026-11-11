@@ -1,0 +1,1 @@
+import {request,post} from './client';import type {Venue} from '../types/domain';export const getVenues=()=>request<Venue[]>('/venues');export const createVenue=(data:unknown)=>post<Venue>('/venues',data);

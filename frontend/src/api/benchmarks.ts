@@ -1,0 +1,1 @@
+import {request,post} from './client';import type {Benchmark} from '../types/domain';export const getBenchmarks=()=>request<Benchmark[]>('/benchmarks');export const createBenchmark=(data:unknown)=>post<Benchmark>('/benchmarks',data);

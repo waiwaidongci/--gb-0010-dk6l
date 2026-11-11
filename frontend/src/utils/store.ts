@@ -1,0 +1,1 @@
+import {useSyncExternalStore} from 'react';export function createStore<T>(initial:T){let state=initial;const listeners=new Set<()=>void>();return {get:()=>state,set:(next:Partial<T>)=>{state={...state,...next};listeners.forEach(fn=>fn());},use:()=>useSyncExternalStore(fn=>{listeners.add(fn);return()=>{listeners.delete(fn);};},()=>state)};}

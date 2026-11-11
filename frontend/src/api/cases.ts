@@ -1,0 +1,3 @@
+import {request,post} from './client';import type {Case} from '../types/domain';export const getCases=()=>request<Case[]>('/cases');export const createCase=(data:unknown)=>post<Case>('/cases',data);
+
+export const approveCase=(id:number)=>request<Case>('/cases/'+id+'/approve',{method:'PATCH'});export async function exportCase(id:number){const r=await fetch(`/api/cases/${id}/export`,{headers:{Authorization:'Bearer '+localStorage.getItem('frontier-token')}});if(!r.ok){const e=await r.json();throw new Error(e.detail);}const url=URL.createObjectURL(await r.blob());const a=document.createElement('a');a.href=url;a.download=`qiyuan-case-${id}.csv`;a.click();URL.revokeObjectURL(url);}

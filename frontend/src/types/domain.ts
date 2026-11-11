@@ -1,0 +1,12 @@
+export interface User{id:number;name:string;email:string;role:string}
+export interface Benchmark{id:number;code:string;name:string;period:string;source_file:string;note:string;row_count:number}
+export interface Venue{id:number;code:string;name:string;district:string;kind:string}
+export interface Observation{observation_id:number;venue_id:number;venue_code:string;venue_name:string;district:string;staff_hours:number;energy_cost:number;visits:number;programs:number}
+export interface Peer{observation_id:number;venue_code:string;venue_name:string;lambda:number}
+export interface EfficiencyRow{observation_id:number;venue_code:string;venue_name:string;status:string;theta:number;strong_efficient:boolean;zero_output:boolean;peers:Peer[];input_slack:Record<string,number>;output_slack:Record<string,number>;projected_inputs:Record<string,number>;projected_outputs:Record<string,number>;source:Record<string,number>}
+export interface ScenarioScore{observation_id:number;venue_code:string;status:string;theta:number|null;delta:number|null;removed_target_self:boolean}
+export interface Scenario{removed_observation_id:number;removed_code:string;removed_name:string;aggregate_external_lambda:number;reference_ids:number[];scores:ScenarioScore[]}
+export interface FrontierResult{baseline:EfficiencyRow[];scenarios:Scenario[];input_scales:Record<string,number>;output_scales:Record<string,number>;reference_ids:number[];self_included_baseline:boolean;sensitivity_policy:string;n:number;inputs:string[];outputs:string[];efficient_count:number;mean_theta:number;fingerprint:string;period:string;benchmark_name:string}
+export interface Run{id:number;name:string;benchmark_id:number;inputs:string[];outputs:string[];sensitivity_count:number;status:string;error:string;created_at:string;result:Partial<FrontierResult>}
+export interface Case{id:number;title:string;run_id:number;observation_id:number;hypothesis:string;verification:string;status:string;approved_by:string;created_at:string}
+export interface Audit{id:number;actor:string;action:string;status_code:number;created_at:string}

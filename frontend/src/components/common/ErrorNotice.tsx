@@ -1,0 +1,1 @@
+export default function ErrorNotice({message,retry}:{message:string;retry:()=>void}){return message?<div className="error-notice" role="alert">{message}<button onClick={retry}>重新读取 ↻</button></div>:null}

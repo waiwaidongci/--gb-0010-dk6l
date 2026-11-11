@@ -1,0 +1,1 @@
+import {useEffect,useRef} from 'react';export function usePolling(action:()=>Promise<unknown>,interval=2500){const ref=useRef(action);ref.current=action;useEffect(()=>{const timer=setInterval(()=>ref.current().catch(()=>{}),interval);return()=>clearInterval(timer);},[interval]);}
